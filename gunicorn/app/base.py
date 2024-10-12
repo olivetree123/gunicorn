@@ -199,9 +199,12 @@ class Application(BaseApplication):
         self.chdir()
 
     def run(self):
+        # gaojian: 是否需要打印配置信息
         if self.cfg.print_config:
             print(self.cfg)
 
+        # gaojian: check_config 参数用于检查配置文件的有效性。
+        # gaojian: 当启用此参数时，Gunicorn 会加载并验证配置文件，但不会启动服务器。
         if self.cfg.print_config or self.cfg.check_config:
             try:
                 self.load()
@@ -213,15 +216,45 @@ class Application(BaseApplication):
                 sys.exit(1)
             sys.exit(0)
 
+        # gaojian: spew参数用于调试目的
+        # gaojian: spew参数是一个布尔值，用于控制是否打印出当前进程的所有线程的栈信息
+        # gaojian: 如果设置了spew参数，gunicorn会记录每个Python语句的执行情况，这对于调试和性能分析非常有用，但会显著降低性能
+        # gaojian: 如果设置了spew参数，将会打印出当前进程的所有线程的栈信息
+        # gaojian: 通过这些信息，可以看到当前进程的所有线程的调用栈信息
+        # gaojian: 这对于调试多线程程序非常有用
+        # gaojian: 但是，由于打印的信息非常多，所以不建议在生产环境中使用
         if self.cfg.spew:
             debug.spew()
 
         if self.cfg.daemon:
             if os.environ.get('NOTIFY_SOCKET'):
-                msg = "Warning: you shouldn't specify `daemon = True`" \
-                      " when launching by systemd with `Type = notify`"
-                print(msg, file=sys.stderr, flush=True)
+                # 当使用 systemd 启动进程并配置了 Type = notify 时，
+                # 不要将进程配置为守护进程（daemon = True），
+                # 因为这会导致 systemd 无法正确跟踪进程的状态。
+                # 推荐使用 Type = simple 作为替代方案。
 
+                # systemd 会有这个问题吗？
+                # 是的，systemd 确实会有这个问题。
+                # 具体来说，当你使用 systemd 启动进程并配置了 Type=notify 时，
+                # 如果进程被配置为守护进程（daemon=True），systemd 将无法正确跟踪进程的状态。
+                # 这是因为守护进程通常会脱离终端，导致 systemd 无法接收到进程的状态通知。
+                
+                # Type=notify：这种类型表示进程会在启动后通过 sd_notify 向 systemd 发送通知，告知其状态（例如启动完成、正在运行等）。
+                # systemd 依赖这些通知来跟踪进程的状态。
+                # 例如，当进程启动后，可以通过 sd_notify(0, "READY=1") 向 systemd 发送一个 READY=1 的通知，
+                # 以告知 systemd 进程已经启动完成。这样 systemd 就可以知道进程已经启动完成了。
+
+                # 当进程被配置为守护进程时，systemd 无法接收到 sd_notify 发送的状态通知，导致 systemd 无法正确跟踪进程的状态。
+                # 此时可以使用 Type=simple 代替 Type=notify，这样 systemd 就不会依赖进程发送的通知来跟踪进程的状态。
+                # Type=simple 表示 systemd 只会启动进程并认为它已经启动完成，而不需要进程发送任何通知。
+                msg = (
+                    "Warning: you shouldn't specify `daemon = True` when launching by systemd with `Type = notify` "
+                    "because systemd will not be able to track the status of the process. "
+                    "It is recommended to use `Type = simple` instead. "
+                    "See https://www.freedesktop.org/software/system"
+                )
+                print(msg, file=sys.stderr, flush=True)
+            
             util.daemonize(self.cfg.enable_stdio_inheritance)
 
         # set python paths

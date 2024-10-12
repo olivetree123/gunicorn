@@ -40,6 +40,9 @@ class Worker:
         This is called pre-fork so it shouldn't do anything to the
         current process. If there's a need to make process wide
         changes you'll want to do that in ``self.init_process()``.
+
+        gaojian: pre-fork时调用，因此不应对当前进程执行任何操作。
+        gaojian: 如果需要对整个进程进行更改，应在``self.init_process()``中执行。
         """
         self.age = age
         self.pid = "[booting]"
@@ -68,10 +71,13 @@ class Worker:
         return "<Worker %s>" % self.pid
 
     def notify(self):
-        """\
+        """
         Your worker subclass must arrange to have this method called
         once every ``self.timeout`` seconds. If you fail in accomplishing
         this task, the master process will murder your workers.
+
+        gaojian: 您的工作子类必须安排调用此方法每`self.timeout`秒一次。
+        gaojian: 如果你未能完成这个任务，主进程会杀掉你的worker进程。
         """
         self.tmp.notify()
 

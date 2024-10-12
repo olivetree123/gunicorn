@@ -11,6 +11,8 @@ from gunicorn import util
 
 class WSGIApplication(Application):
     def init(self, parser, opts, args):
+
+        # app_uri = wsgi:app
         self.app_uri = None
 
         if opts.paste:
@@ -44,17 +46,21 @@ class WSGIApplication(Application):
                 raise ConfigError("No application module specified.")
 
     def load_wsgiapp(self):
+        # gaojian: 加载 wsgiapp
+        # gaojian: app_uri = wsgi:app
         return util.import_app(self.app_uri)
 
-    def load_pasteapp(self):
-        from .pasterapp import get_wsgi_app
-        return get_wsgi_app(self.app_uri, defaults=self.cfg.paste_global_conf)
+    # def load_pasteapp(self):
+    #     from .pasterapp import get_wsgi_app
+    #     return get_wsgi_app(self.app_uri, defaults=self.cfg.paste_global_conf)
 
+    # gaojian: 加载配置文件
     def load(self):
-        if self.cfg.paste is not None:
-            return self.load_pasteapp()
-        else:
-            return self.load_wsgiapp()
+        # if self.cfg.paste is not None:
+        #     return self.load_pasteapp()
+        # else:
+        #     return self.load_wsgiapp()
+        return self.load_wsgiapp()
 
 
 def run(prog=None):

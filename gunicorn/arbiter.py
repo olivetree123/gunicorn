@@ -22,36 +22,60 @@ class Arbiter:
     Arbiter maintain the workers processes alive. It launches or
     kills them if needed. It also manages application reloading
     via SIGHUP/USR2.
+
+    Arbiter是gunicorn的核心类，负责管理worker进程的生命周期，启动、关闭、重启worker进程
     """
 
     # A flag indicating if a worker failed to
     # to boot. If a worker process exist with
     # this error code, the arbiter will terminate.
+    # This is used to avoid infinite start/stop
+    # cycles when a worker fails to boot.
+    # gaojian: 一个标志，表示worker进程启动失败，如果worker进程以这个错误码退出，arbiter会终止
+    # gaojian: 这个标志用于避免worker进程启动失败导致的无限启动/停止循环
     WORKER_BOOT_ERROR = 3
 
     # A flag indicating if an application failed to be loaded
+    # If a worker process exist with this error code, the arbiter will terminate.
+    # This is used to avoid infinite start/stop cycles when an application fails to load.
+    # gaojian: 一个标志，表示应用加载失败, 如果worker进程以这个错误码退出，arbiter会终止
+    # gaojian: 这个标志用于避免应用加载失败导致的无限启动/停止循环
     APP_LOAD_ERROR = 4
 
     START_CTX = {}
 
+    # gaojian: LISTENERS是一个列表，里面存放了所有的监听socket
     LISTENERS = []
+
+    # gaojian: WORKERS是一个字典，key是worker进程的pid，value是worker对象
     WORKERS = {}
+
+    # PIPE是一个管道，用于父进程和子进程之间通信
     PIPE = []
 
     # I love dynamic languages
+    # SIG_QUEUE是一个列表，用于存放信号
     SIG_QUEUE = []
+
+    # SIGNALS是一个列表，里面存放了所有的信号
     SIGNALS = [getattr(signal, "SIG%s" % x)
                for x in "HUP QUIT INT TERM TTIN TTOU USR1 USR2 WINCH".split()]
+    
+    # SIG_NAMES是一个字典，key是信号的值，value是信号的名字
     SIG_NAMES = dict(
         (getattr(signal, name), name[3:].lower()) for name in dir(signal)
         if name[:3] == "SIG" and name[3] != "_"
     )
 
     def __init__(self, app):
+        # app: BaseApplication实例
         os.environ["SERVER_SOFTWARE"] = SERVER_SOFTWARE
 
         self._num_workers = None
+
+        # gaojian: 最近一次记录的活跃worker数量
         self._last_logged_active_worker_count = None
+
         self.log = None
 
         self.setup(app)
@@ -63,12 +87,14 @@ class Arbiter:
         self.master_pid = 0
         self.master_name = "Master"
 
+        # gaojian: 获取当前工作目录
         cwd = util.getcwd()
 
         args = sys.argv[:]
         args.insert(0, sys.executable)
 
         # init start context
+        # gaojian: 初始化启动参数
         self.START_CTX = {
             "args": args,
             "cwd": cwd,
@@ -85,6 +111,15 @@ class Arbiter:
     num_workers = property(_get_num_workers, _set_num_workers)
 
     def setup(self, app):
+        """
+        Setup the arbiter. This is where the configuration is read
+        and the logging is initialized. The application is then loaded
+        and the configuration is passed to it.
+
+        :param app: The application to run (an instance of `gunicorn.app.base.BaseApplication`)
+
+        gaojian: 设置arbiter，读取配置，初始化日志，加载应用，将配置传递给应用
+        """
         self.app = app
         self.cfg = app.cfg
 
@@ -354,6 +389,9 @@ class Arbiter:
         """\
         Sleep until PIPE is readable or we timeout.
         A readable PIPE means a signal occurred.
+
+        睡眠，直到PIPE可读或者超时
+        可读的PIPE意味着有信号发生
         """
         try:
             ready = select.select([self.PIPE[0]], [], [], 1.0)
@@ -565,6 +603,8 @@ class Arbiter:
         """\
         Maintain the number of workers by spawning or killing
         as required.
+
+        维护worker数量，不够的时候创建，多了就删除
         """
         if len(self.WORKERS) < self.num_workers:
             self.spawn_workers()
@@ -589,22 +629,36 @@ class Arbiter:
                                    self.app, self.timeout / 2.0,
                                    self.cfg, self.log)
         self.cfg.pre_fork(self, worker)
+
+        # gaojian: 在父进程中，fork返回新创建子进程的进程ID
+        # gaojian: 在子进程中，fork返回0
         pid = os.fork()
+
+        # 父进程执行这个代码
         if pid != 0:
             worker.pid = pid
             self.WORKERS[pid] = worker
             return pid
 
+        # gaojian: 子进程执行这个代码
         # Do not inherit the temporary files of other workers
+        # gaojian: 为什么要关闭其他worker的临时文件？
+        # gaojian: 因为子进程会继承父进程的文件描述符，如果不关闭其他worker的临时文件，会导致文件描述符泄露
+        # gaojian: 什么是文件描述符泄露？
+        # gaojian: 文件描述符泄露是指在程序运行过程中，不断的打开文件，但是不关闭文件，导致文件描述符耗尽
         for sibling in self.WORKERS.values():
             sibling.tmp.close()
 
         # Process Child
+        # gaojian: 子进程设置自己的进程ID
         worker.pid = os.getpid()
         try:
+            # gaojian: 设置进程名称
             util._setproctitle("worker [%s]" % self.proc_name)
             self.log.info("Booting worker with pid: %s", worker.pid)
+            
             self.cfg.post_fork(self, worker)
+            # gaojian: 子进程初始化
             worker.init_process()
             sys.exit(0)
         except SystemExit:

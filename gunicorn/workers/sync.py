@@ -65,6 +65,8 @@ class SyncWorker(base.Worker):
             # that no connection is waiting we fall down to the
             # select which is where we'll wait for a bit for new
             # workers to come give us some love.
+            # 接受一个连接。
+            # 如果我们收到一个错误，告诉我们没有连接在等待，我们将下降到select，这是我们将等待一段时间，等待新的工作进程来给我们一些爱的地方。
             try:
                 self.accept(listener)
                 # Keep processing clients until no one is waiting. This
@@ -112,10 +114,11 @@ class SyncWorker(base.Worker):
     def run(self):
         # if no timeout is given the worker will never wait and will
         # use the CPU for nothing. This minimal timeout prevent it.
+        # gaojian: 如果没有给出超时时间，工作进程将永远不会等待，并且将使用CPU做无用功。这个最小超时时间可以防止这种情况。
         timeout = self.timeout or 0.5
 
-        # self.socket appears to lose its blocking status after
-        # we fork in the arbiter. Reset it here.
+        # self.socket appears to lose its blocking status after we fork in the arbiter. Reset it here.
+        # gaojian: 在 arbiter fork后，self.socket似乎丢失了其阻塞状态。在这里重置它。
         for s in self.sockets:
             s.setblocking(0)
 
@@ -174,6 +177,7 @@ class SyncWorker(base.Worker):
             if self.nr >= self.max_requests:
                 self.log.info("Autorestarting worker after current request.")
                 self.alive = False
+            # gaojian: 调用框架的app处理请求
             respiter = self.wsgi(environ, resp.start_response)
             try:
                 if isinstance(respiter, environ['wsgi.file_wrapper']):
@@ -184,6 +188,7 @@ class SyncWorker(base.Worker):
                 resp.close()
             finally:
                 request_time = datetime.now() - request_start
+                # gaojian: 记录 access log
                 self.log.access(resp, req, environ, request_time)
                 if hasattr(respiter, "close"):
                     respiter.close()

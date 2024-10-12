@@ -88,7 +88,8 @@ class ThreadWorker(base.Worker):
                         "Check the number of worker connections and threads.")
 
     def init_process(self):
-        self.tpool = self.get_thread_pool()
+        # tpool 线程池，用于处理请求
+        self.tpool: futures.ThreadPoolExecutor = self.get_thread_pool()
         self.poller = selectors.DefaultSelector()
         self._lock = RLock()
         super().init_process()
@@ -105,19 +106,20 @@ class ThreadWorker(base.Worker):
         time.sleep(0.1)
         sys.exit(0)
 
-    def _wrap_future(self, fs, conn):
+    def _wrap_future(self, fs: futures.Future, conn: TConn):
         fs.conn = conn
         self.futures.append(fs)
         fs.add_done_callback(self.finish_request)
 
-    def enqueue_req(self, conn):
+    def enqueue_req(self, conn: TConn):
         conn.init()
         # submit the connection to a worker
-        fs = self.tpool.submit(self.handle, conn)
+        fs: futures.Future = self.tpool.submit(self.handle, conn)
         self._wrap_future(fs, conn)
 
     def accept(self, server, listener):
         try:
+            # gaojian: 获取连接请求
             sock, client = listener.accept()
             # initialize the connection object
             conn = TConn(self.cfg, sock, client, server)
@@ -125,6 +127,7 @@ class ThreadWorker(base.Worker):
             self.nr_conns += 1
             # wait until socket is readable
             with self._lock:
+                # register the socket to the poller
                 self.poller.register(conn.sock, selectors.EVENT_READ,
                                      partial(self.on_client_socket_readable, conn))
         except OSError as e:
@@ -133,6 +136,7 @@ class ThreadWorker(base.Worker):
                 raise
 
     def on_client_socket_readable(self, conn, client):
+        # gaojian: 处理请求
         with self._lock:
             # unregister the client from the poller
             self.poller.unregister(client)
@@ -146,6 +150,7 @@ class ThreadWorker(base.Worker):
                     return
 
         # submit the connection to a worker
+        # gaojian: 将连接请求提交给线程池处理
         self.enqueue_req(conn)
 
     def murder_keepalived(self):
@@ -258,6 +263,7 @@ class ThreadWorker(base.Worker):
                     self._keep.append(conn)
 
                     # add the socket to the event loop
+                    # gaojian: 将 socket 加入到事件循环中，等待新的连接
                     self.poller.register(conn.sock, selectors.EVENT_READ,
                                          partial(self.on_client_socket_readable, conn))
             else:
@@ -341,6 +347,7 @@ class ThreadWorker(base.Worker):
                 resp.close()
             finally:
                 request_time = datetime.now() - request_start
+                # 记录 accesslog
                 self.log.access(resp, req, environ, request_time)
                 if hasattr(respiter, "close"):
                     respiter.close()

@@ -251,12 +251,25 @@ def parse_address(netloc, default_port='8000'):
 
 
 def close_on_exec(fd):
+    """
+    gaojian: 对文件描述符进行设置，当执行新程序时关闭文件描述符
+
+    gaojian: FD_CLOEXEC 是一个文件描述符标志，用于指示在执行 exec 系列函数（如 execve、execl 等）时，自动关闭该文件描述符。
+    gaojian: 通过 fcntl 函数设置 FD_CLOEXEC 标志，可以确保在执行 exec 系列函数时，文件描述符会被关闭。
+
+    gaojian: exec 系列函数：这些函数用于替换当前进程的镜像（代码和数据）并执行一个新程序。
+    gaojian: 执行 exec 后，当前进程的所有文件描述符都会被继承到新程序中，除非这些文件描述符设置了 FD_CLOEXEC 标志。
+    """
     flags = fcntl.fcntl(fd, fcntl.F_GETFD)
     flags |= fcntl.FD_CLOEXEC
     fcntl.fcntl(fd, fcntl.F_SETFD, flags)
 
 
 def set_non_blocking(fd):
+    """
+    gaojian: 将文件描述符设置为非阻塞模式
+    gaojian: 在非阻塞模式下，当调用 read 或 write 方法时，如果没有数据可读或者没有数据可写，read 或 write 方法会立即返回，而不会阻塞等待。
+    """
     flags = fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_NONBLOCK
     fcntl.fcntl(fd, fcntl.F_SETFL, flags)
 
@@ -355,6 +368,7 @@ def _called_with_wrong_args(f):
         del tb
 
 
+# import app
 def import_app(module):
     parts = module.split(":", 1)
     if len(parts) == 1:
@@ -372,6 +386,8 @@ def import_app(module):
 
     # Parse obj as a single expression to determine if it's a valid
     # attribute name or function call.
+    # gaojian: 解析obj字符串，判断是否是一个合法的属性名或函数调用
+    # gaojian: wsgi:app，其中app 需要是一个可调用对象或者一个属性名
     try:
         expression = ast.parse(obj, mode="eval").body
     except SyntaxError:
@@ -414,6 +430,7 @@ def import_app(module):
 
     # If the expression was a function call, call the retrieved object
     # to get the real application.
+    # gaojian: 此时app是一个可调用对象，调用它获取真正的app对象
     if args is not None:
         try:
             app = app(*args, **kwargs)
@@ -465,7 +482,8 @@ def is_hoppish(header):
 
 
 def daemonize(enable_stdio_inheritance=False):
-    """\
+    """
+    标准的守护进程化过程。
     Standard daemonization of a process.
     http://www.faqs.org/faqs/unix-faq/programmer/faq/ section 1.7
     """
