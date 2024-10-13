@@ -119,7 +119,11 @@ class ThreadWorker(base.Worker):
 
     def accept(self, server, listener):
         try:
-            # gaojian: 获取连接请求
+            # @gaojian
+            # 获取连接请求
+            # listener.accept() 返回一个包含两个元素的元组 (conn, address)：
+            # - conn 是一个新的套接字对象（socket.socket 类型），表示与客户端的连接。
+            # - address 是客户端的地址，通常是一个包含 IP 地址和端口号的元组。
             sock, client = listener.accept()
             # initialize the connection object
             conn = TConn(self.cfg, sock, client, server)
@@ -139,6 +143,15 @@ class ThreadWorker(base.Worker):
         # gaojian: 处理请求
         with self._lock:
             # unregister the client from the poller
+
+            # @gaojian
+            # 当你从事件循环中取消注册一个客户端，操作系统将不再监视该客户端的文件描述符上的事件。这意味着：
+            # - 不再接收事件通知：事件循环将不再接收该客户端的任何读、写或错误事件的通知。
+            # - 数据处理：如果该客户端仍然活跃并发送数据，操作系统的网络栈仍然会接收这些数据，但你的应用程序将不会被通知这些数据的到来，因为文件描述符已经被取消注册。
+            # - 资源释放：如果你关闭了该客户端的文件描述符（例如通过 client.close()），操作系统将释放与该文件描述符相关的资源。
+
+            # TODO: 这里是不是有问题，应该是取消注册conn.sock，而不是client，是吗？
+            # 这个client 是什么？
             self.poller.unregister(client)
 
             if conn.initialized:
